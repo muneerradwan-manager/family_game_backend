@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Auth\JwtService;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\EnsureUserNotBanned;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Support\PhoneNumber;
@@ -25,6 +26,15 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
+        // المشرف أغلق التسجيل: الرفض قبل التحقق من الحقول — لا معنى لتصحيح
+        // نموذج لن يُقبل مهما صحّ.
+        if (! config('platform.registration.enabled')) {
+            return response()->json([
+                'message' => (string) config('platform.registration.message'),
+                'registrationClosed' => true,
+            ], 403);
+        }
+
         $data = $request->validate([
             'phone' => ['required', 'string', 'max:25'],
             'password' => ['required', 'string', 'min:6', 'max:72'],
@@ -77,6 +87,14 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'phone' => 'الرقم أو كلمة السر غير صحيحة.',
             ]);
+        }
+
+        // الإيقاف يُكشف بعد صحة كلمة السر فقط: من لا يعرفها لا يعرف أن الحساب موقوف.
+        if ($user->isBanned()) {
+            return response()->json([
+                'message' => EnsureUserNotBanned::message($user->ban_reason),
+                'banned' => true,
+            ], 403);
         }
 
         return response()->json([

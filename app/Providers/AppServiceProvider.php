@@ -19,11 +19,13 @@ use App\Games\State\GameStateStore;
 use App\Notifications\FcmPushNotifier;
 use App\Notifications\LogPushNotifier;
 use App\Notifications\PushNotifier;
+use App\Settings\SettingsStore;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -52,6 +54,13 @@ class AppServiceProvider extends ServiceProvider
             $app->make(PercentGenerator::class),
         ]));
 
+        // تعديلات لوحة الإدارة فوق ملفات config — مخزن واحد للعملية كلها،
+        // فيتذكّر ما طبّقه ويعرف متى تغيّر شيء.
+        $this->app->singleton(SettingsStore::class, fn ($app) => new SettingsStore(
+            Cache::store(),
+            $app['config'],
+        ));
+
         // غياب إعداد FCM لا يعطّل فتح غرفة: نسجّل الإشعار بدل إرساله.
         $this->app->singleton(PushNotifier::class, function () {
             $credentials = config('services.fcm.credentials');
@@ -67,6 +76,14 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // أولاً: تعديلات المشرف فوق config، قبل أن يقرأ أحدٌ قيمة.
+        $settings = $this->app->make(SettingsStore::class);
+        $settings->apply();
+
+        // عامل الطابور لا يُقلع مع كل مهمة: قبل كل مهمة نلتقط ما غيّره
+        // المشرف منذ آخر مرة، فتسري نقاط اللعبة الجديدة بلا إعادة تشغيل.
+        Queue::before(fn () => $settings->applyIfStale());
+
         $this->registerJwtGuard();
         $this->registerRateLimits();
 

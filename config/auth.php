@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Admin;
 use App\Models\User;
 
 return [
@@ -49,6 +50,13 @@ return [
             'driver' => 'jwt',
             'provider' => 'users',
         ],
+
+        // لوحة الإدارة: جلسة متصفح لمشرفين من جدول مستقل. لا توكن التطبيق
+        // يفتحها، ولا جلستها تفتح مسارات التطبيق.
+        'admin' => [
+            'driver' => 'session',
+            'provider' => 'admins',
+        ],
     ],
 
     /*
@@ -88,6 +96,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        'admins' => [
+            'driver' => 'eloquent',
+            'model' => Admin::class,
         ],
 
         // 'users' => [

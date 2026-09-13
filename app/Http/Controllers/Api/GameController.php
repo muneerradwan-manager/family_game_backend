@@ -14,7 +14,6 @@ use App\Notifications\PushNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -35,12 +34,15 @@ class GameController extends Controller
     {
         $games = [];
 
-        foreach ($this->registry->all() as $module) {
+        // المعطّلة من لوحة الإدارة لا تظهر أصلاً، والاسم والأيقونة كما عدّلها المشرف.
+        foreach ($this->registry->enabled() as $module) {
+            $presentation = $this->registry->presentation($module);
+
             $games[] = [
                 'gameType' => $module->type(),
-                'name' => $module->name(),
-                'icon' => $module->icon(),
-                'description' => $module->description(),
+                'name' => $presentation['name'],
+                'icon' => $presentation['icon'],
+                'description' => $presentation['description'],
                 'minPlayers' => $module->minPlayers(),
                 'maxPlayers' => $module->maxPlayers(),
                 'configSchema' => $module->configSchema(),
@@ -62,9 +64,16 @@ class GameController extends Controller
         $this->authorizeMember($request, $channel);
 
         $data = $request->validate([
-            'gameType' => ['required', 'string', Rule::in(array_keys($this->registry->all()))],
+            'gameType' => ['required', 'string'],
             'config' => ['sometimes', 'array'],
         ]);
+
+        // اللعبة المعطّلة من لوحة الإدارة لا تُفتح لها غرف جديدة.
+        if (! $this->registry->isEnabled($data['gameType'])) {
+            throw ValidationException::withMessages([
+                'gameType' => 'هذه اللعبة غير متاحة حالياً.',
+            ]);
+        }
 
         $module = $this->registry->get($data['gameType']);
         $config = $module->normalizeConfig($data['config'] ?? []);
@@ -127,7 +136,7 @@ class GameController extends Controller
             $channel,
             except: [$user->id],
             title: $channel->name,
-            body: $user->username.' بلّش '.$module->name().' — انضم!',
+            body: $user->username.' بلّش '.$this->registry->presentation($module)['name'].' — انضم!',
             data: ['type' => 'game_invite', 'gameId' => $game->id, 'channelId' => $channel->id],
         );
 

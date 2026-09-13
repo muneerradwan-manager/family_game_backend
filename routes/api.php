@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\GameController;
 use App\Http\Controllers\Api\HadafController;
 use App\Http\Controllers\Api\HarfController;
 use App\Http\Controllers\Api\MashhadController;
+use App\Http\Controllers\Api\PlatformController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SpyController;
 use App\Http\Controllers\Api\UploadController;
@@ -30,6 +31,10 @@ Route::get('uploads/{path}', [UploadController::class, 'show'])
     ->where('path', '.*')
     ->name('uploads.show');
 
+// إعدادات التطبيق من لوحة الإدارة (صيانة، تسجيل، نسخة، ثيمات): قبل الدخول،
+// ومفتوحة حتى في وضع الصيانة — وإلا ما عرف الجهاز أن هناك صيانة.
+Route::get('app/config', [PlatformController::class, 'config'])->middleware('throttle:api');
+
 Route::prefix('auth')->group(function (): void {
     // Rate limiting على الدخول وإنشاء الحسابات: حماية أساسية بغياب تحقق SMS.
     Route::post('register', [AuthController::class, 'register'])->middleware('throttle:auth');
@@ -37,12 +42,16 @@ Route::prefix('auth')->group(function (): void {
     Route::post('refresh', [AuthController::class, 'refresh'])->middleware('throttle:auth');
 
     Route::middleware('auth:api')->group(function (): void {
+        // الخروج مسموح للموقوف: إبطال توكنه في مصلحة الجميع.
         Route::post('logout', [AuthController::class, 'logout']);
-        Route::get('me', [AuthController::class, 'me']);
+        Route::get('me', [AuthController::class, 'me'])->middleware('not-banned');
     });
 });
 
-Route::middleware(['auth:api', 'throttle:api'])->group(function (): void {
+Route::middleware(['auth:api', 'not-banned', 'throttle:api'])->group(function (): void {
+
+    // ---- الإعلانات ----
+    Route::get('announcements', [PlatformController::class, 'announcements']);
 
     // ---- الصور ----
     Route::post('uploads', [UploadController::class, 'store']);

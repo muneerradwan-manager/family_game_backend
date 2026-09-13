@@ -26,7 +26,14 @@ class User extends Authenticatable
     {
         return [
             'password_hash' => 'hashed',
+            'banned_at' => 'datetime',
         ];
+    }
+
+    /** أوقفه المشرف: لا دخول ولا طلبات حتى يُرفع الإيقاف. */
+    public function isBanned(): bool
+    {
+        return $this->banned_at !== null;
     }
 
     /**
